@@ -33,6 +33,14 @@ const App = () => (
               </InspectorLayout>
             }
           />
+          <Route
+            path="/vencidos/alertas"
+            element={
+              <InspectorLayout>
+                <AlertasVencimiento />
+              </InspectorLayout>
+            }
+          />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
