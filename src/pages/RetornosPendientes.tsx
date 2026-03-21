@@ -210,7 +210,7 @@ export default function RetornosPendientes() {
               Referencia rápida: condición → destino recomendado
             </SheetDescription>
           </SheetHeader>
-          <DecisionGuide />
+          <DecisionGuide onClose={() => setGuideOpen(false)} />
         </SheetContent>
       </Sheet>
     </div>

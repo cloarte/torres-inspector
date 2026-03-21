@@ -1,15 +1,15 @@
-export function DecisionGuide() {
+export function DecisionGuide({ onClose }: { onClose?: () => void }) {
   const cards = [
     {
       title: "✅ ÓPTIMO — Producto en perfectas condiciones",
-      borderColor: "border-l-green-500",
+      borderColor: "border-l-success",
       recommended: "REINGRESO (vuelve al stock disponible)",
       others: "STOCK_FLOTANTE",
       note: null,
     },
     {
       title: "🟠 DEFECTO ESTÉTICO — Daño visual, apto para consumo",
-      borderColor: "border-l-orange-500",
+      borderColor: "border-l-warning",
       recommended: "POOL GG",
       others: "REINGRESO (si el defecto es mínimo), MERMA",
       note: "→ El Gerente puede venderlo con descuento o donarlo.",
@@ -17,16 +17,16 @@ export function DecisionGuide() {
     {
       title: "🟡 PRÓXIMO A VENCER — Menos de 7 días para vencer",
       borderColor: "border-l-amber-500",
-      recommended: "POOL GG (si ≤5 días, apto para donación)",
+      recommended: "Si quedan ≤5 días: POOL GG (apto para donación). Si quedan >5 días: MERMA o POOL GG",
       others: "MERMA, POOL GG",
       note: "→ El Gerente puede autorizar donación si faltan ≤5 días.",
     },
     {
       title: "🔴 VENCIDO — No apto para consumo ni venta",
-      borderColor: "border-l-red-500",
+      borderColor: "border-l-danger",
       recommended: "MERMA",
       others: "POOL GG (solo si el GG quiere registrar donación tardía)",
-      note: "REINGRESO y STOCK_FLOTANTE están DESHABILITADOS.",
+      note: "⚠ REINGRESO y STOCK_FLOTANTE están DESHABILITADOS.",
     },
   ];
 
@@ -51,13 +51,22 @@ export function DecisionGuide() {
         </div>
       ))}
 
-      <div className="bg-accent/10 rounded-lg p-4 text-sm">
-        <p className="font-semibold text-foreground">💡 POOL GG</p>
-        <p className="text-muted-foreground mt-1">
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-sm">
+        <p className="font-semibold text-purple-800">💡 POOL GG</p>
+        <p className="text-purple-700 mt-1">
           Significa que el Gerente General tomará la decisión final: donar,
           vender con descuento, o merma.
         </p>
       </div>
+
+      {onClose && (
+        <button
+          onClick={onClose}
+          className="w-full min-h-[48px] rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors"
+        >
+          Cerrar
+        </button>
+      )}
     </div>
   );
 }
