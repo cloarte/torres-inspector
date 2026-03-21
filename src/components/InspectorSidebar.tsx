@@ -15,7 +15,7 @@ const NAV_GROUPS = [
       {
         label: "Historial de Retornos",
         icon: ClipboardList,
-        path: "/entrega/historial",
+        path: "/entrega/retornos/historial",
       },
     ],
   },
