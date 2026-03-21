@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { InspectorLayout } from "@/components/InspectorLayout";
 import RetornosPendientes from "@/pages/RetornosPendientes";
 import HistorialRetornos from "@/pages/HistorialRetornos";
+import AlertasVencimiento from "@/pages/AlertasVencimiento";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,14 @@ const App = () => (
             element={
               <InspectorLayout>
                 <HistorialRetornos />
+              </InspectorLayout>
+            }
+          />
+          <Route
+            path="/vencidos/alertas"
+            element={
+              <InspectorLayout>
+                <AlertasVencimiento />
               </InspectorLayout>
             }
           />
