@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InspectorLayout } from "@/components/InspectorLayout";
 import RetornosPendientes from "@/pages/RetornosPendientes";
+import HistorialRetornos from "@/pages/HistorialRetornos";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,14 @@ const App = () => (
             element={
               <InspectorLayout>
                 <RetornosPendientes />
+              </InspectorLayout>
+            }
+          />
+          <Route
+            path="/entrega/retornos/historial"
+            element={
+              <InspectorLayout>
+                <HistorialRetornos />
               </InspectorLayout>
             }
           />
