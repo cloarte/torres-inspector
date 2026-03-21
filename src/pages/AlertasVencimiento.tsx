@@ -324,7 +324,8 @@ export default function AlertasVencimiento() {
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Alerta</p>
                   {(() => {
-                    const badge = ALERTA_BADGE[detailAlerta.tipoAlerta];
+                    const dias = differenceInDays(detailAlerta.fechaVencimiento, today);
+                    const badge = ALERTA_BADGE[getTipoAlerta(dias)];
                     return <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full", badge.cls)}>{badge.label}</span>;
                   })()}
                 </div>
