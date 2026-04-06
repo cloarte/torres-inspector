@@ -2,49 +2,32 @@ import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Check, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { MOCK_RUTAS, type RetornoItem, type Condicion, type Destino } from "@/types/inspector";
+import { MOCK_RUTAS, type ProductoRetorno } from "@/types/inspector";
 
-type TabFilter = "TODOS" | "PENDIENTES" | "INSPECCIONADOS" | "POOL_GG";
-
-const CONDICION_LABELS: Record<Condicion, string> = {
-  OPTIMO: "ÓPTIMO",
-  DEFECTO_ESTETICO: "DEFECTO ESTÉTICO",
-  PROXIMO_VENCER: "PRÓXIMO A VENCER",
-  VENCIDO: "VENCIDO",
-};
-
-const TIPO_RETORNO_STYLE: Record<string, string> = {
-  RECHAZO_CLIENTE: "bg-orange-100 text-orange-700",
-  DAÑADO: "bg-red-100 text-red-700",
-  VENCIDO_RETORNO: "bg-red-100 text-red-700",
-  NO_ENTREGADO: "bg-muted text-muted-foreground",
-  SOBRANTE: "bg-blue-100 text-blue-700",
-};
-
-const DESTINO_LABELS: Record<Destino, string> = {
-  REINGRESO: "REINGRESO",
-  STOCK_FLOTANTE: "STOCK FLOTANTE",
-  MERMA: "MERMA",
-  POOL_GG: "POOL GG",
-};
-
-function getHighlightedDestino(cond: Condicion): Destino | null {
-  switch (cond) {
-    case "OPTIMO": return "REINGRESO";
-    case "DEFECTO_ESTETICO": return "POOL_GG";
-    case "PROXIMO_VENCER": return "POOL_GG";
-    case "VENCIDO": return "MERMA";
-  }
+function getRowSum(p: ProductoRetorno): number {
+  return p.vendido + p.optimo + p.defectoEstetico + p.proximoVencer + p.vencido;
 }
 
-function getDisabledDestinos(cond: Condicion): Destino[] {
-  if (cond === "VENCIDO") return ["REINGRESO", "STOCK_FLOTANTE"];
-  return [];
+function getRowBg(p: ProductoRetorno): string {
+  const sum = getRowSum(p);
+  if (sum !== p.cantDespacho) return "bg-red-50";
+  if (p.vencido > 0) return "bg-red-50";
+  if (p.proximoVencer > 0) return "bg-amber-50";
+  if (p.defectoEstetico > 0) return "bg-orange-50";
+  return "bg-green-50";
+}
+
+function isRowComplete(p: ProductoRetorno): boolean {
+  const sum = getRowSum(p);
+  if (sum !== p.cantDespacho) return false;
+  if (p.optimo > 0 && !p.destinoOptimo) return false;
+  return true;
 }
 
 export default function ControlRetorno() {
@@ -52,31 +35,12 @@ export default function ControlRetorno() {
   const navigate = useNavigate();
   const ruta = MOCK_RUTAS.find((r) => r.id === rutaId);
 
-  const [retornos, setRetornos] = useState<RetornoItem[]>(ruta?.retornos ?? []);
-  const [tab, setTab] = useState<TabFilter>("TODOS");
+  const [productos, setProductos] = useState<ProductoRetorno[]>(ruta?.productosRetorno ?? []);
   const [despachoOpen, setDespachoOpen] = useState(false);
-  const [formState, setFormState] = useState<Record<string, { condicion?: Condicion; destino?: Destino; obs: string }>>({});
-
-  const counts = useMemo(() => {
-    const total = retornos.length;
-    const inspeccionados = retornos.filter((r) => r.estado === "PROCESADO").length;
-    const pendientes = retornos.filter((r) => r.estado === "PENDIENTE").length;
-    const mermas = retornos.filter((r) => r.destino === "MERMA").length;
-    return { total, inspeccionados, pendientes, mermas };
-  }, [retornos]);
-
-  const filtered = useMemo(() => {
-    return retornos.filter((r) => {
-      if (tab === "PENDIENTES" && r.estado !== "PENDIENTE") return false;
-      if (tab === "INSPECCIONADOS" && r.estado !== "PROCESADO") return false;
-      if (tab === "POOL_GG" && r.destino !== "POOL_GG") return false;
-      return true;
-    });
-  }, [retornos, tab]);
 
   if (!ruta) {
     return (
-      <div className="max-w-5xl mx-auto p-8 text-center">
+      <div className="max-w-6xl mx-auto p-8 text-center">
         <p className="text-muted-foreground text-lg">Ruta no encontrada</p>
         <Button variant="ghost" className="mt-4" onClick={() => navigate("/inspector/rutas")}>← Volver</Button>
       </div>
@@ -84,44 +48,34 @@ export default function ControlRetorno() {
   }
 
   const salidaHadObs = ruta.salida === "CON_OBS";
-  const salidaObsCount = ruta.productosSalida.filter((p) => p.cantVerificada !== p.cantDespacho).length;
+  const salidaObsCount = ruta.productosSalida.filter((p) => p.optimo !== p.cantDespacho).length;
 
-  const getForm = (id: string) => formState[id] ?? { obs: "" };
-  const setForm = (id: string, update: Partial<{ condicion?: Condicion; destino?: Destino; obs: string }>) => {
-    setFormState((prev) => ({ ...prev, [id]: { ...getForm(id), ...update } }));
-  };
+  const counts = useMemo(() => {
+    const total = productos.length;
+    const complete = productos.filter(isRowComplete).length;
+    const incomplete = total - complete;
+    const mermas = productos.filter((p) => p.vencido > 0).length;
+    return { total, complete, incomplete, mermas };
+  }, [productos]);
 
-  const handleConfirm = (id: string) => {
-    const form = getForm(id);
-    if (!form.condicion || !form.destino) return;
+  const allComplete = useMemo(() => productos.length > 0 && productos.every(isRowComplete), [productos]);
 
-    setRetornos((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, estado: "PROCESADO" as const, condicion: form.condicion, destino: form.destino, observaciones: form.obs, horaProcesado: format(new Date(), "HH:mm") }
-          : r
-      )
+  const updateProducto = (id: string, field: keyof ProductoRetorno, value: number | string | undefined) => {
+    setProductos((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
     );
-
-    if (form.destino === "POOL_GG") {
-      toast("⏳ Enviado al Pool GG — el Gerente General recibirá notificación", { duration: 4000 });
-    } else {
-      toast(`✓ Inspección registrada — ${form.destino}`, { duration: 3000 });
-    }
   };
 
-  const tabs: { key: TabFilter; label: string; count?: number }[] = [
-    { key: "TODOS", label: "Todos" },
-    { key: "PENDIENTES", label: "Pendientes", count: counts.pendientes },
-    { key: "INSPECCIONADOS", label: "Inspeccionados", count: counts.inspeccionados },
-    { key: "POOL_GG", label: "En Pool GG" },
-  ];
-
-  const allDestinos: Destino[] = ["REINGRESO", "STOCK_FLOTANTE", "MERMA", "POOL_GG"];
-  const allCondiciones: Condicion[] = ["OPTIMO", "DEFECTO_ESTETICO", "PROXIMO_VENCER", "VENCIDO"];
+  const handleSubmit = () => {
+    const poolGG = productos.filter((p) => p.defectoEstetico > 0 || p.proximoVencer > 0).length;
+    const merma = productos.filter((p) => p.vencido > 0).length;
+    const stock = productos.filter((p) => p.optimo > 0).length;
+    toast(`✓ Retorno ${ruta.codigo} completado — ${stock} al Stock/Almacén · ${poolGG} al Pool GG · ${merma} a Merma`, { duration: 5000 });
+    navigate("/inspector/rutas");
+  };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="max-w-6xl mx-auto space-y-4 pb-24">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
@@ -157,7 +111,7 @@ export default function ControlRetorno() {
                   <tr className="text-xs text-muted-foreground uppercase border-b">
                     <th className="px-2 py-2 text-left font-medium">Producto</th>
                     <th className="px-2 py-2 text-center font-medium">Cant. Despachada</th>
-                    <th className="px-2 py-2 text-center font-medium">Cant. Verificada</th>
+                    <th className="px-2 py-2 text-center font-medium">Óptimo Salida</th>
                     <th className="px-2 py-2 text-left font-medium">Estado Salida</th>
                   </tr>
                 </thead>
@@ -166,10 +120,10 @@ export default function ControlRetorno() {
                     <tr key={p.id}>
                       <td className="px-2 py-1.5">{p.producto}</td>
                       <td className="px-2 py-1.5 text-center">{p.cantDespacho}</td>
-                      <td className="px-2 py-1.5 text-center">{p.cantVerificada}</td>
+                      <td className="px-2 py-1.5 text-center">{p.optimo}</td>
                       <td className="px-2 py-1.5">
-                        <span className={cn("text-xs px-2 py-0.5 rounded", p.cantVerificada === p.cantDespacho ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                          {p.cantVerificada === p.cantDespacho ? "OK" : "DIFERENCIA"}
+                        <span className={cn("text-xs px-2 py-0.5 rounded", p.optimo === p.cantDespacho ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
+                          {p.optimo === p.cantDespacho ? "OK" : "DIFERENCIA"}
                         </span>
                       </td>
                     </tr>
@@ -191,10 +145,10 @@ export default function ControlRetorno() {
       {/* Summary Banner */}
       <div className="bg-card rounded-xl p-4 shadow-sm flex items-center divide-x divide-border">
         {[
-          { label: "Retornos", value: counts.total, cls: "text-muted-foreground" },
-          { label: "Inspeccionados", value: counts.inspeccionados, cls: "text-green-600" },
-          { label: "Pendientes", value: counts.pendientes, cls: "text-amber-600" },
-          { label: "Mermas", value: counts.mermas, cls: "text-red-600" },
+          { label: "Productos", value: counts.total, cls: "text-muted-foreground" },
+          { label: "Clasificados", value: counts.complete, cls: "text-green-600" },
+          { label: "Pendientes", value: counts.incomplete, cls: "text-amber-600" },
+          { label: "Con Merma", value: counts.mermas, cls: "text-red-600" },
         ].map((s) => (
           <div key={s.label} className="flex-1 text-center px-3">
             <p className="text-xs text-muted-foreground">{s.label}</p>
@@ -203,155 +157,140 @@ export default function ControlRetorno() {
         ))}
       </div>
 
-      {/* Filter Chips */}
-      <div className="flex gap-1 overflow-x-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              "min-h-[40px] px-4 rounded-full text-sm font-medium transition-colors whitespace-nowrap active:scale-95",
-              tab === t.key
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {t.label}
-            {t.count != null && <span className="ml-1.5 text-xs opacity-80">{t.count}</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* Retorno Cards */}
-      <div className="space-y-3">
-        {filtered.map((retorno, i) => {
-          const form = getForm(retorno.id);
-          const isPending = retorno.estado === "PENDIENTE";
-          const highlighted = form.condicion ? getHighlightedDestino(form.condicion) : null;
-          const disabled = form.condicion ? getDisabledDestinos(form.condicion) : [];
-
-          return (
-            <div
-              key={retorno.id}
-              className="bg-card rounded-xl shadow-sm overflow-hidden animate-fade-in"
-              style={{ animationDelay: `${i * 60}ms` }}
-            >
-              <div className="flex flex-col sm:flex-row">
-                {/* LEFT */}
-                <div className="p-4 sm:w-1/2 space-y-2 border-b sm:border-b-0 sm:border-r border-border">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-mono text-muted-foreground">{retorno.id}</span>
-                    <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", retorno.estado === "PROCESADO" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                      {retorno.estado}
-                    </span>
-                  </div>
-                  <p className="text-base font-semibold text-foreground">{retorno.producto}</p>
-                  <p className="text-sm text-muted-foreground">{retorno.sku} · {retorno.lote}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {ruta.vendedor} · <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded">{ruta.codigo}</span> · Cantidad: {retorno.cantidad} {retorno.unidad}
-                  </p>
-                  <span className={cn("inline-block text-xs font-medium px-2 py-0.5 rounded", TIPO_RETORNO_STYLE[retorno.tipoRetorno] ?? "bg-muted text-muted-foreground")}>
-                    {retorno.tipoRetorno.replace("_", " ")}
-                  </span>
-
-                  {/* Show result if processed */}
-                  {retorno.estado === "PROCESADO" && retorno.condicion && retorno.destino && (
-                    <div className="mt-2 p-2 bg-muted rounded text-sm space-y-1">
-                      <p><span className="font-medium">Condición:</span> {CONDICION_LABELS[retorno.condicion]}</p>
-                      <p><span className="font-medium">Destino:</span> {DESTINO_LABELS[retorno.destino]}</p>
-                      {retorno.observaciones && <p><span className="font-medium">Obs:</span> {retorno.observaciones}</p>}
-                      <p className="text-xs text-muted-foreground">Procesado: {retorno.horaProcesado}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* RIGHT — Inspection Form */}
-                {isPending && (
-                  <div className="p-4 sm:w-1/2 space-y-4">
-                    {/* Condición */}
-                    <div>
-                      <p className="text-sm font-medium text-foreground mb-2">Condición del producto</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {allCondiciones.map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => setForm(retorno.id, { condicion: c, destino: undefined })}
-                            className={cn(
-                              "min-h-[48px] rounded-lg text-sm font-medium transition-all",
-                              form.condicion === c
-                                ? "bg-primary text-primary-foreground scale-105 shadow"
-                                : "bg-muted text-muted-foreground hover:bg-muted/80"
-                            )}
-                          >
-                            {CONDICION_LABELS[c]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Destino */}
-                    <div>
-                      <p className="text-sm font-medium text-foreground mb-2">Destino</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {allDestinos.map((d) => {
-                          const isDisabled = !form.condicion || disabled.includes(d);
-                          const isHighlighted = highlighted === d;
-                          const isSelected = form.destino === d;
-                          return (
-                            <button
-                              key={d}
-                              disabled={isDisabled}
-                              onClick={() => setForm(retorno.id, { destino: d })}
-                              className={cn(
-                                "min-h-[48px] rounded-lg text-sm font-medium transition-all",
-                                isDisabled && "opacity-40 cursor-not-allowed",
-                                isSelected
-                                  ? "bg-primary text-primary-foreground scale-105 shadow"
-                                  : isHighlighted
-                                  ? d === "REINGRESO" ? "bg-green-100 text-green-700 ring-2 ring-green-400"
-                                    : d === "MERMA" ? "bg-red-100 text-red-700 ring-2 ring-red-400"
-                                    : d === "POOL_GG" ? "bg-purple-100 text-purple-700 ring-2 ring-purple-400"
-                                    : "bg-blue-100 text-blue-700 ring-2 ring-blue-400"
-                                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-                              )}
-                            >
-                              {DESTINO_LABELS[d]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {form.destino === "POOL_GG" && (
-                        <p className="text-xs text-purple-600 mt-1.5">El GG decidirá: donación, descuento o descarte</p>
+      {/* Retorno Table */}
+      <div className="bg-card rounded-xl shadow-sm overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b text-xs text-muted-foreground uppercase">
+              <th className="px-3 py-3 font-medium w-[22%]">Producto</th>
+              <th className="px-3 py-3 font-medium w-[8%]">Lote</th>
+              <th className="px-3 py-3 font-medium w-[8%] text-center">Cant. Desp.</th>
+              <th className="px-3 py-3 font-medium w-[8%]">Vendido</th>
+              <th className="px-3 py-3 font-medium w-[8%]">Óptimo</th>
+              <th className="px-3 py-3 font-medium w-[8%]">Def. Est.</th>
+              <th className="px-3 py-3 font-medium w-[8%]">Próx. Venc.</th>
+              <th className="px-3 py-3 font-medium w-[8%]">Vencido</th>
+              <th className="px-3 py-3 font-medium w-[12%]">Destino Óptimo</th>
+              <th className="px-3 py-3 font-medium w-[10%]">Observación</th>
+              <th className="px-3 py-3 font-medium w-[4%]"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {productos.map((p) => {
+              const sum = getRowSum(p);
+              const diff = p.cantDespacho - sum;
+              const complete = isRowComplete(p);
+              return (
+                <tr key={p.id} className={cn("min-h-[56px]", getRowBg(p))}>
+                  <td className="px-3 py-2">
+                    <p className="text-sm font-medium text-foreground">{p.producto}</p>
+                    <p className="text-xs text-muted-foreground">{p.sku}</p>
+                  </td>
+                  <td className="px-3 py-2 text-sm">{p.lote}</td>
+                  <td className="px-3 py-2 text-sm text-center font-medium">{p.cantDespacho}</td>
+                  <td className="px-3 py-2">
+                    <Input type="number" min={0} value={p.vendido}
+                      onChange={(e) => updateProducto(p.id, "vendido", parseInt(e.target.value) || 0)}
+                      className="w-16 min-h-[48px] text-center" />
+                  </td>
+                  <td className="px-3 py-2">
+                    <Input type="number" min={0} value={p.optimo}
+                      onChange={(e) => updateProducto(p.id, "optimo", parseInt(e.target.value) || 0)}
+                      className="w-16 min-h-[48px] text-center" />
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="space-y-1">
+                      <Input type="number" min={0} value={p.defectoEstetico}
+                        onChange={(e) => updateProducto(p.id, "defectoEstetico", parseInt(e.target.value) || 0)}
+                        className="w-16 min-h-[48px] text-center" />
+                      {p.defectoEstetico > 0 && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 block text-center">Pool GG</span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="space-y-1">
+                      <Input type="number" min={0} value={p.proximoVencer}
+                        onChange={(e) => updateProducto(p.id, "proximoVencer", parseInt(e.target.value) || 0)}
+                        className="w-16 min-h-[48px] text-center" />
+                      {p.proximoVencer > 0 && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 block text-center">Pool GG</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="space-y-1">
+                      <Input type="number" min={0} value={p.vencido}
+                        onChange={(e) => updateProducto(p.id, "vencido", parseInt(e.target.value) || 0)}
+                        className="w-16 min-h-[48px] text-center" />
+                      {p.vencido > 0 && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700 block text-center">Merma</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    {p.optimo > 0 ? (
+                      <Select
+                        value={p.destinoOptimo ?? ""}
+                        onValueChange={(v) => updateProducto(p.id, "destinoOptimo", v as "REINGRESO" | "STOCK_FLOTANTE")}
+                      >
+                        <SelectTrigger className="w-[140px] min-h-[48px] text-sm">
+                          <SelectValue placeholder="Seleccionar" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="REINGRESO">REINGRESO</SelectItem>
+                          <SelectItem value="STOCK_FLOTANTE">STOCK FLOTANTE</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Input value={p.observacion}
+                      onChange={(e) => updateProducto(p.id, "observacion", e.target.value)}
+                      placeholder="—" className="w-full min-h-[48px] text-sm" />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {complete ? (
+                      <Check size={18} className="text-green-600 mx-auto" />
+                    ) : (
+                      <div className="text-center">
+                        <XCircle size={18} className="text-red-500 mx-auto" />
+                        {diff !== 0 && <p className="text-[10px] text-red-600 mt-0.5">Faltan {diff}u</p>}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {productos.length === 0 && (
+              <tr>
+                <td colSpan={11} className="px-3 py-12 text-center text-muted-foreground">
+                  No hay productos de retorno para esta ruta
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
-                    {/* Observaciones */}
-                    <Textarea
-                      value={form.obs}
-                      onChange={(e) => setForm(retorno.id, { obs: e.target.value })}
-                      placeholder="Observaciones (opcional)"
-                      className="min-h-[60px]"
-                    />
-
-                    {/* Confirm */}
-                    <Button
-                      className="w-full min-h-[48px]"
-                      disabled={!form.condicion || !form.destino}
-                      onClick={() => handleConfirm(retorno.id)}
-                    >
-                      Confirmar inspección
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className="bg-card rounded-xl p-12 text-center shadow-sm">
-            <p className="text-muted-foreground text-lg">No hay retornos en esta categoría</p>
-          </div>
-        )}
+      {/* Sticky Footer */}
+      <div className="fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-4 z-20">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <Button variant="ghost" className="min-h-[48px]" onClick={() => navigate("/inspector/rutas")}>
+            Cancelar
+          </Button>
+          {allComplete ? (
+            <Button className="min-h-[48px] bg-green-600 hover:bg-green-700 text-white" onClick={handleSubmit}>
+              ✓ Completar Inspección de Retorno
+            </Button>
+          ) : (
+            <Button className="min-h-[48px]" disabled>
+              Clasifica todos los productos para continuar
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
