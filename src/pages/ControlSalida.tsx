@@ -1,21 +1,32 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowLeft, Check, AlertTriangle, XCircle } from "lucide-react";
+import { ArrowLeft, Check, AlertTriangle, XCircle, ChevronRight, ChevronDown, Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { MOCK_RUTAS, type ProductoSalida } from "@/types/inspector";
+import { MOCK_RUTAS, genId, type ProductoSalida, type LoteSalida } from "@/types/inspector";
 
 type RowStatus = "green" | "orange" | "red";
 
-function getRowStatus(p: ProductoSalida): RowStatus {
-  if (p.optimo !== p.cantDespacho) return "red";
-  if (p.defectoEstetico > 0 || p.danado > 0) return "orange";
+function getLoteStatus(l: LoteSalida): RowStatus {
+  if (l.optimo !== l.cantDespacho) return "red";
+  if (l.defectoEstetico > 0 || l.danado > 0) return "orange";
   return "green";
+}
+
+function getProductStatus(p: ProductoSalida): RowStatus {
+  const statuses = p.lotes.map(getLoteStatus);
+  if (statuses.includes("red")) return "red";
+  if (statuses.includes("orange")) return "orange";
+  return "green";
+}
+
+function sumField(lotes: LoteSalida[], field: keyof LoteSalida): number {
+  return lotes.reduce((s, l) => s + (typeof l[field] === "number" ? (l[field] as number) : 0), 0);
 }
 
 export default function ControlSalida() {
@@ -25,6 +36,11 @@ export default function ControlSalida() {
 
   const [productos, setProductos] = useState<ProductoSalida[]>(ruta?.productosSalida ?? []);
   const [obsGenerales, setObsGenerales] = useState(ruta?.observacionesSalida ?? "");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
 
   if (!ruta) {
     return (
@@ -38,14 +54,42 @@ export default function ControlSalida() {
   const pedidos = productos.filter((p) => p.tipo === "PEDIDO");
   const sobrestock = productos.filter((p) => p.tipo === "SOBRESTOCK");
 
-  const hasDefects = useMemo(() => productos.some((p) => p.defectoEstetico > 0 || p.danado > 0), [productos]);
-  const allOptimoMatch = useMemo(() => productos.every((p) => p.optimo === p.cantDespacho), [productos]);
-  const defectProducts = useMemo(() => productos.filter((p) => p.defectoEstetico > 0 || p.danado > 0), [productos]);
+  const hasDefects = productos.some((p) => p.lotes.some((l) => l.defectoEstetico > 0 || l.danado > 0));
+  const allOptimoMatch = productos.every((p) => p.lotes.every((l) => l.optimo === l.cantDespacho));
+  const defectProducts = productos.filter((p) => p.lotes.some((l) => l.defectoEstetico > 0 || l.danado > 0));
 
-  const updateProducto = (id: string, field: keyof ProductoSalida, value: number | string) => {
+  const updateLote = (prodId: string, loteId: string, field: keyof LoteSalida, value: number | string) => {
     setProductos((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+      prev.map((p) =>
+        p.id === prodId
+          ? { ...p, lotes: p.lotes.map((l) => (l.id === loteId ? { ...l, [field]: value } : l)) }
+          : p
+      )
     );
+  };
+
+  const addLote = (prodId: string) => {
+    setProductos((prev) =>
+      prev.map((p) =>
+        p.id === prodId
+          ? { ...p, lotes: [...p.lotes, { id: genId(), lote: "", cantDespacho: 0, optimo: 0, defectoEstetico: 0, danado: 0, observacion: "" }] }
+          : p
+      )
+    );
+  };
+
+  const removeLote = (prodId: string, loteId: string) => {
+    setProductos((prev) =>
+      prev.map((p) =>
+        p.id === prodId
+          ? { ...p, lotes: p.lotes.filter((l) => l.id !== loteId) }
+          : p
+      )
+    );
+  };
+
+  const updateProductObs = (prodId: string, value: string) => {
+    setProductos((prev) => prev.map((p) => (p.id === prodId ? { ...p, observacion: value } : p)));
   };
 
   const handleSubmit = (conObs: boolean) => {
@@ -69,77 +113,147 @@ export default function ControlSalida() {
     ? "orange"
     : "green";
 
-  function renderRows(items: ProductoSalida[]) {
+  const totalProducts = productos.reduce((s, p) => s + p.lotes.length, 0);
+
+  function renderProductGroup(items: ProductoSalida[]) {
     return items.map((p) => {
-      const status = getRowStatus(p);
-      const isSobrestock = p.tipo === "SOBRESTOCK";
+      const status = getProductStatus(p);
+      const isOpen = expanded[p.id] ?? false;
+      const totalDespacho = sumField(p.lotes, "cantDespacho");
+      const totalOptimo = sumField(p.lotes, "optimo");
+      const totalDefEst = sumField(p.lotes, "defectoEstetico");
+      const totalDanado = sumField(p.lotes, "danado");
+
       return (
-        <tr
-          key={p.id}
-          className={cn(
-            "min-h-[56px]",
-            status === "red" && "bg-red-50",
-            status === "orange" && "bg-orange-50",
-            isSobrestock && "border-l-2 border-blue-300"
-          )}
-        >
-          <td className="px-3 py-2">
-            <p className="text-sm font-medium text-foreground">{p.producto}</p>
-            <p className="text-xs text-muted-foreground">{p.sku}</p>
-          </td>
-          <td className="px-3 py-2 text-sm">{p.lote}</td>
-          <td className="px-3 py-2">
-            <span className={cn("text-xs font-medium px-2 py-0.5 rounded", p.tipo === "PEDIDO" ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground")}>
-              {p.tipo}
-            </span>
-          </td>
-          <td className="px-3 py-2 text-sm text-center font-medium">{p.cantDespacho}</td>
-          <td className="px-3 py-2">
-            <Input
-              type="number"
-              min={0}
-              value={p.optimo}
-              onChange={(e) => updateProducto(p.id, "optimo", parseInt(e.target.value) || 0)}
-              className={cn("w-20 min-h-[48px] text-center", p.optimo !== p.cantDespacho && "border-red-300 bg-red-50")}
-            />
-          </td>
-          <td className="px-3 py-2">
-            <Input
-              type="number"
-              min={0}
-              value={p.defectoEstetico}
-              onChange={(e) => updateProducto(p.id, "defectoEstetico", parseInt(e.target.value) || 0)}
-              className="w-20 min-h-[48px] text-center"
-            />
-          </td>
-          <td className="px-3 py-2">
-            <Input
-              type="number"
-              min={0}
-              value={p.danado}
-              onChange={(e) => updateProducto(p.id, "danado", parseInt(e.target.value) || 0)}
-              className="w-20 min-h-[48px] text-center"
-            />
-          </td>
-          <td className="px-3 py-2">
-            <Input
-              value={p.observacion}
-              onChange={(e) => updateProducto(p.id, "observacion", e.target.value)}
-              placeholder="—"
-              className="w-full min-h-[48px] text-sm"
-            />
-          </td>
-          <td className="px-3 py-2 text-center">
-            {status === "green" && <Check size={18} className="text-green-600 mx-auto" />}
-            {status === "orange" && <AlertTriangle size={18} className="text-orange-500 mx-auto" />}
-            {status === "red" && (
-              <div className="text-center">
-                <XCircle size={18} className="text-red-500 mx-auto" />
-                <p className="text-[10px] text-red-600 mt-0.5">Óptimo debe ser {p.cantDespacho}u</p>
-              </div>
+        <tbody key={p.id} className="border-b border-border">
+          {/* Parent Row */}
+          <tr
+            className={cn(
+              "min-h-[56px] cursor-pointer hover:bg-muted/30 transition-colors",
+              status === "red" && "bg-red-50",
+              status === "orange" && "bg-orange-50",
+              p.tipo === "SOBRESTOCK" && "border-l-2 border-blue-300"
             )}
-          </td>
-        </tr>
+            onClick={() => toggleExpand(p.id)}
+          >
+            <td className="px-3 py-2 w-[4%]">
+              {isOpen ? <ChevronDown size={16} className="text-muted-foreground" /> : <ChevronRight size={16} className="text-muted-foreground" />}
+            </td>
+            <td className="px-3 py-2">
+              <p className="text-sm font-medium text-foreground">{p.producto}</p>
+              <p className="text-xs text-muted-foreground">{p.sku}</p>
+            </td>
+            <td className="px-3 py-2">
+              <span className={cn("text-xs font-medium px-2 py-0.5 rounded", p.tipo === "PEDIDO" ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground")}>
+                {p.tipo}
+              </span>
+            </td>
+            <td className="px-3 py-2 text-sm text-center font-medium">{totalDespacho}</td>
+            <td className="px-3 py-2 text-sm text-center font-bold">{totalOptimo}</td>
+            <td className="px-3 py-2 text-sm text-center">{totalDefEst}</td>
+            <td className="px-3 py-2 text-sm text-center">{totalDanado}</td>
+            <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+              <Input
+                value={p.observacion}
+                onChange={(e) => updateProductObs(p.id, e.target.value)}
+                placeholder="—"
+                className="w-full min-h-[40px] text-sm"
+              />
+            </td>
+            <td className="px-3 py-2 text-center">
+              {status === "green" && <Check size={18} className="text-green-600 mx-auto" />}
+              {status === "orange" && <AlertTriangle size={18} className="text-orange-500 mx-auto" />}
+              {status === "red" && <XCircle size={18} className="text-red-500 mx-auto" />}
+            </td>
+          </tr>
+
+          {/* Lot Sub-Rows */}
+          {isOpen && p.lotes.map((l) => {
+            const lStatus = getLoteStatus(l);
+            return (
+              <tr key={l.id} className="bg-slate-50 min-h-[48px]">
+                <td className="px-3 py-2 text-right text-muted-foreground text-xs">└</td>
+                <td className="px-3 py-2" colSpan={1}>
+                  <Input
+                    value={l.lote}
+                    onChange={(e) => updateLote(p.id, l.id, "lote", e.target.value)}
+                    placeholder="Lote"
+                    className="w-32 min-h-[40px] text-sm"
+                  />
+                </td>
+                <td className="px-3 py-2"></td>
+                <td className="px-3 py-2">
+                  <Input
+                    type="number" min={0} value={l.cantDespacho}
+                    onChange={(e) => updateLote(p.id, l.id, "cantDespacho", parseInt(e.target.value) || 0)}
+                    className={cn("w-16 min-h-[40px] text-center")}
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <Input
+                    type="number" min={0} value={l.optimo}
+                    onChange={(e) => updateLote(p.id, l.id, "optimo", parseInt(e.target.value) || 0)}
+                    className={cn("w-16 min-h-[40px] text-center", l.optimo !== l.cantDespacho && "border-red-300 bg-red-50")}
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <Input
+                    type="number" min={0} value={l.defectoEstetico}
+                    onChange={(e) => updateLote(p.id, l.id, "defectoEstetico", parseInt(e.target.value) || 0)}
+                    className="w-16 min-h-[40px] text-center"
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <Input
+                    type="number" min={0} value={l.danado}
+                    onChange={(e) => updateLote(p.id, l.id, "danado", parseInt(e.target.value) || 0)}
+                    className="w-16 min-h-[40px] text-center"
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <Input
+                    value={l.observacion}
+                    onChange={(e) => updateLote(p.id, l.id, "observacion", e.target.value)}
+                    placeholder="—"
+                    className="w-full min-h-[40px] text-sm"
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1 justify-center">
+                    {lStatus === "green" && <Check size={14} className="text-green-600" />}
+                    {lStatus === "orange" && <AlertTriangle size={14} className="text-orange-500" />}
+                    {lStatus === "red" && (
+                      <div className="text-center">
+                        <XCircle size={14} className="text-red-500 mx-auto" />
+                        <p className="text-[9px] text-red-600">≠{l.cantDespacho}u</p>
+                      </div>
+                    )}
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                      disabled={p.lotes.length <= 1}
+                      onClick={() => removeLote(p.id, l.id)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+
+          {/* Add lot button */}
+          {isOpen && (
+            <tr className="bg-slate-50">
+              <td className="px-3 py-2 text-right text-muted-foreground text-xs">└</td>
+              <td colSpan={8} className="px-3 py-2">
+                <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => addLote(p.id)}>
+                  <Plus size={14} className="mr-1" /> Agregar lote
+                </Button>
+              </td>
+            </tr>
+          )}
+        </tbody>
       );
     });
   }
@@ -155,7 +269,7 @@ export default function ControlSalida() {
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Control de Salida — Ruta {ruta.codigo}</h1>
             <p className="text-muted-foreground mt-0.5">
-              {ruta.vendedor} · {format(new Date(), "dd/MM/yyyy", { locale: es })} · {productos.length} productos a verificar
+              {ruta.vendedor} · {format(new Date(), "dd/MM/yyyy", { locale: es })} · {totalProducts} lotes a verificar
             </p>
           </div>
         </div>
@@ -176,28 +290,28 @@ export default function ControlSalida() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b text-xs text-muted-foreground uppercase">
-              <th className="px-3 py-3 font-medium w-[26%]">Producto</th>
-              <th className="px-3 py-3 font-medium w-[10%]">Lote</th>
+              <th className="px-3 py-3 font-medium w-[4%]"></th>
+              <th className="px-3 py-3 font-medium w-[22%]">Producto</th>
               <th className="px-3 py-3 font-medium w-[9%]">Tipo</th>
-              <th className="px-3 py-3 font-medium w-[10%] text-center">Cant. Despacho</th>
-              <th className="px-3 py-3 font-medium w-[10%]">Óptimo</th>
-              <th className="px-3 py-3 font-medium w-[10%]">Def. Estético</th>
-              <th className="px-3 py-3 font-medium w-[10%]">Dañado</th>
+              <th className="px-3 py-3 font-medium w-[10%] text-center">Cant. Desp.</th>
+              <th className="px-3 py-3 font-medium w-[10%] text-center">Óptimo</th>
+              <th className="px-3 py-3 font-medium w-[10%] text-center">Def. Est.</th>
+              <th className="px-3 py-3 font-medium w-[10%] text-center">Dañado</th>
               <th className="px-3 py-3 font-medium w-[15%]">Observación</th>
               <th className="px-3 py-3 font-medium w-[5%]"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
-            {renderRows(pedidos)}
-            {sobrestock.length > 0 && (
+          {renderProductGroup(pedidos)}
+          {sobrestock.length > 0 && (
+            <tbody>
               <tr>
                 <td colSpan={9} className="px-3 py-2 text-center text-xs text-muted-foreground font-medium">
                   ── Sobrestock ──
                 </td>
               </tr>
-            )}
-            {renderRows(sobrestock)}
-          </tbody>
+            </tbody>
+          )}
+          {renderProductGroup(sobrestock)}
         </table>
       </div>
 
@@ -208,11 +322,15 @@ export default function ControlSalida() {
             Productos con observaciones de calidad:
           </p>
           <ul className="space-y-1">
-            {defectProducts.map((d) => (
-              <li key={d.id} className="text-sm text-orange-700">
-                • {d.producto} — Defecto Estético: {d.defectoEstetico}u · Dañado: {d.danado}u
-              </li>
-            ))}
+            {defectProducts.map((d) => {
+              const de = sumField(d.lotes, "defectoEstetico");
+              const da = sumField(d.lotes, "danado");
+              return (
+                <li key={d.id} className="text-sm text-orange-700">
+                  • {d.producto} — Defecto Estético: {de}u · Dañado: {da}u
+                </li>
+              );
+            })}
           </ul>
           <p className="text-sm text-orange-600 mt-2">⚠ Rosnelli será notificada.</p>
         </div>

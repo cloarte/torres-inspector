@@ -1,33 +1,54 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowLeft, ChevronDown, ChevronUp, Check, XCircle } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, ChevronRight, Check, XCircle, Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { MOCK_RUTAS, type ProductoRetorno } from "@/types/inspector";
+import { MOCK_RUTAS, genId, type ProductoRetorno, type LoteRetorno } from "@/types/inspector";
 
-function getRowSum(p: ProductoRetorno): number {
-  return p.vendido + p.optimo + p.defectoEstetico + p.proximoVencer + p.vencido;
+function sumLoteField(lotes: LoteRetorno[], field: keyof LoteRetorno): number {
+  return lotes.reduce((s, l) => s + (typeof l[field] === "number" ? (l[field] as number) : 0), 0);
 }
 
-function getRowBg(p: ProductoRetorno): string {
-  const sum = getRowSum(p);
-  if (sum !== p.cantDespacho) return "bg-red-50";
-  if (p.vencido > 0) return "bg-red-50";
-  if (p.proximoVencer > 0) return "bg-amber-50";
-  if (p.defectoEstetico > 0) return "bg-orange-50";
-  return "bg-green-50";
+function getLoteSum(l: LoteRetorno): number {
+  return l.vendido + l.optimo + l.defectoEstetico + l.proximoVencer + l.vencido;
 }
 
-function isRowComplete(p: ProductoRetorno): boolean {
-  const sum = getRowSum(p);
+function getProductSum(p: ProductoRetorno): number {
+  return p.lotes.reduce((s, l) => s + getLoteSum(l), 0);
+}
+
+function isProductComplete(p: ProductoRetorno): boolean {
+  const sum = getProductSum(p);
   if (sum !== p.cantDespacho) return false;
-  if (p.optimo > 0 && !p.destinoOptimo) return false;
+  const totalOptimo = sumLoteField(p.lotes, "optimo");
+  if (totalOptimo > 0 && !p.destinoOptimo) return false;
   return true;
+}
+
+type ParentStatus = "green" | "red" | "amber" | "orange";
+
+function getParentStatus(p: ProductoRetorno): ParentStatus {
+  const sum = getProductSum(p);
+  if (sum !== p.cantDespacho) return "red";
+  const totalVencido = sumLoteField(p.lotes, "vencido");
+  if (totalVencido > 0) return "red";
+  const totalProx = sumLoteField(p.lotes, "proximoVencer");
+  if (totalProx > 0) return "amber";
+  const totalDef = sumLoteField(p.lotes, "defectoEstetico");
+  if (totalDef > 0) return "orange";
+  return "green";
+}
+
+function getParentBg(status: ParentStatus): string {
+  if (status === "red") return "bg-red-50";
+  if (status === "amber") return "bg-amber-50";
+  if (status === "orange") return "bg-orange-50";
+  return "bg-green-50";
 }
 
 export default function ControlRetorno() {
@@ -37,16 +58,21 @@ export default function ControlRetorno() {
 
   const [productos, setProductos] = useState<ProductoRetorno[]>(ruta?.productosRetorno ?? []);
   const [despachoOpen, setDespachoOpen] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
 
   const counts = useMemo(() => {
     const total = productos.length;
-    const complete = productos.filter(isRowComplete).length;
+    const complete = productos.filter(isProductComplete).length;
     const incomplete = total - complete;
-    const mermas = productos.filter((p) => p.vencido > 0).length;
+    const mermas = productos.filter((p) => sumLoteField(p.lotes, "vencido") > 0).length;
     return { total, complete, incomplete, mermas };
   }, [productos]);
 
-  const allComplete = useMemo(() => productos.length > 0 && productos.every(isRowComplete), [productos]);
+  const allComplete = useMemo(() => productos.length > 0 && productos.every(isProductComplete), [productos]);
 
   if (!ruta) {
     return (
@@ -58,18 +84,45 @@ export default function ControlRetorno() {
   }
 
   const salidaHadObs = ruta.salida === "CON_OBS";
-  const salidaObsCount = ruta.productosSalida.filter((p) => p.optimo !== p.cantDespacho).length;
 
-  const updateProducto = (id: string, field: keyof ProductoRetorno, value: number | string | undefined) => {
+  const updateLote = (prodId: string, loteId: string, field: keyof LoteRetorno, value: number | string) => {
     setProductos((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+      prev.map((p) =>
+        p.id === prodId
+          ? { ...p, lotes: p.lotes.map((l) => (l.id === loteId ? { ...l, [field]: value } : l)) }
+          : p
+      )
     );
   };
 
+  const addLote = (prodId: string) => {
+    setProductos((prev) =>
+      prev.map((p) =>
+        p.id === prodId
+          ? { ...p, lotes: [...p.lotes, { id: genId(), lote: "", vendido: 0, optimo: 0, defectoEstetico: 0, proximoVencer: 0, vencido: 0, observacion: "" }] }
+          : p
+      )
+    );
+  };
+
+  const removeLote = (prodId: string, loteId: string) => {
+    setProductos((prev) =>
+      prev.map((p) =>
+        p.id === prodId
+          ? { ...p, lotes: p.lotes.filter((l) => l.id !== loteId) }
+          : p
+      )
+    );
+  };
+
+  const updateDestinoOptimo = (prodId: string, value: "REINGRESO" | "STOCK_FLOTANTE") => {
+    setProductos((prev) => prev.map((p) => (p.id === prodId ? { ...p, destinoOptimo: value } : p)));
+  };
+
   const handleSubmit = () => {
-    const poolGG = productos.filter((p) => p.defectoEstetico > 0 || p.proximoVencer > 0).length;
-    const merma = productos.filter((p) => p.vencido > 0).length;
-    const stock = productos.filter((p) => p.optimo > 0).length;
+    const poolGG = productos.filter((p) => sumLoteField(p.lotes, "defectoEstetico") > 0 || sumLoteField(p.lotes, "proximoVencer") > 0).length;
+    const merma = productos.filter((p) => sumLoteField(p.lotes, "vencido") > 0).length;
+    const stock = productos.filter((p) => sumLoteField(p.lotes, "optimo") > 0).length;
     toast(`✓ Retorno ${ruta.codigo} completado — ${stock} al Stock/Almacén · ${poolGG} al Pool GG · ${merma} a Merma`, { duration: 5000 });
     navigate("/inspector/rutas");
   };
@@ -111,23 +164,27 @@ export default function ControlRetorno() {
                   <tr className="text-xs text-muted-foreground uppercase border-b">
                     <th className="px-2 py-2 text-left font-medium">Producto</th>
                     <th className="px-2 py-2 text-center font-medium">Cant. Despachada</th>
-                    <th className="px-2 py-2 text-center font-medium">Óptimo Salida</th>
+                    <th className="px-2 py-2 text-left font-medium">Lotes</th>
                     <th className="px-2 py-2 text-left font-medium">Estado Salida</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {ruta.productosSalida.map((p) => (
-                    <tr key={p.id}>
-                      <td className="px-2 py-1.5">{p.producto}</td>
-                      <td className="px-2 py-1.5 text-center">{p.cantDespacho}</td>
-                      <td className="px-2 py-1.5 text-center">{p.optimo}</td>
-                      <td className="px-2 py-1.5">
-                        <span className={cn("text-xs px-2 py-0.5 rounded", p.optimo === p.cantDespacho ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                          {p.optimo === p.cantDespacho ? "OK" : "DIFERENCIA"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {ruta.productosSalida.map((p) => {
+                    const totalDesp = p.lotes.reduce((s, l) => s + l.cantDespacho, 0);
+                    const allMatch = p.lotes.every((l) => l.optimo === l.cantDespacho);
+                    return (
+                      <tr key={p.id}>
+                        <td className="px-2 py-1.5">{p.producto}</td>
+                        <td className="px-2 py-1.5 text-center">{totalDesp}</td>
+                        <td className="px-2 py-1.5 text-xs text-muted-foreground">{p.lotes.map((l) => l.lote).join(", ")}</td>
+                        <td className="px-2 py-1.5">
+                          <span className={cn("text-xs px-2 py-0.5 rounded", allMatch ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
+                            {allMatch ? "OK" : "DIFERENCIA"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             ) : (
@@ -135,7 +192,7 @@ export default function ControlRetorno() {
             )}
             {salidaHadObs && (
               <div className="bg-orange-50 border border-orange-200 p-2 rounded text-sm text-orange-700">
-                ⚠ Esta ruta tuvo {salidaObsCount} observaciones en la salida.
+                ⚠ Esta ruta tuvo observaciones en la salida.
               </div>
             )}
           </div>
@@ -162,79 +219,67 @@ export default function ControlRetorno() {
         <table className="w-full text-left">
           <thead>
             <tr className="border-b text-xs text-muted-foreground uppercase">
-              <th className="px-3 py-3 font-medium w-[22%]">Producto</th>
-              <th className="px-3 py-3 font-medium w-[8%]">Lote</th>
-              <th className="px-3 py-3 font-medium w-[8%] text-center">Cant. Desp.</th>
-              <th className="px-3 py-3 font-medium w-[8%]">Vendido</th>
-              <th className="px-3 py-3 font-medium w-[8%]">Óptimo</th>
-              <th className="px-3 py-3 font-medium w-[8%]">Def. Est.</th>
-              <th className="px-3 py-3 font-medium w-[8%]">Próx. Venc.</th>
-              <th className="px-3 py-3 font-medium w-[8%]">Vencido</th>
+              <th className="px-3 py-3 font-medium w-[3%]"></th>
+              <th className="px-3 py-3 font-medium w-[18%]">Producto</th>
+              <th className="px-3 py-3 font-medium w-[7%] text-center">Cant. Desp.</th>
+              <th className="px-3 py-3 font-medium w-[7%] text-center">Vendido</th>
+              <th className="px-3 py-3 font-medium w-[7%] text-center">Óptimo</th>
+              <th className="px-3 py-3 font-medium w-[7%] text-center">Def. Est.</th>
+              <th className="px-3 py-3 font-medium w-[7%] text-center">Próx. Venc.</th>
+              <th className="px-3 py-3 font-medium w-[7%] text-center">Vencido</th>
               <th className="px-3 py-3 font-medium w-[12%]">Destino Óptimo</th>
               <th className="px-3 py-3 font-medium w-[10%]">Observación</th>
               <th className="px-3 py-3 font-medium w-[4%]"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
-            {productos.map((p) => {
-              const sum = getRowSum(p);
-              const diff = p.cantDespacho - sum;
-              const complete = isRowComplete(p);
-              return (
-                <tr key={p.id} className={cn("min-h-[56px]", getRowBg(p))}>
+          {productos.map((p) => {
+            const isOpen = expanded[p.id] ?? false;
+            const status = getParentStatus(p);
+            const complete = isProductComplete(p);
+            const totalVendido = sumLoteField(p.lotes, "vendido");
+            const totalOptimo = sumLoteField(p.lotes, "optimo");
+            const totalDefEst = sumLoteField(p.lotes, "defectoEstetico");
+            const totalProx = sumLoteField(p.lotes, "proximoVencer");
+            const totalVencido = sumLoteField(p.lotes, "vencido");
+            const totalSum = getProductSum(p);
+            const diff = p.cantDespacho - totalSum;
+
+            return (
+              <tbody key={p.id} className="border-b border-border">
+                {/* Parent Row */}
+                <tr
+                  className={cn("min-h-[56px] cursor-pointer hover:bg-muted/30 transition-colors", getParentBg(status))}
+                  onClick={() => toggleExpand(p.id)}
+                >
+                  <td className="px-3 py-2">
+                    {isOpen ? <ChevronDown size={16} className="text-muted-foreground" /> : <ChevronRight size={16} className="text-muted-foreground" />}
+                  </td>
                   <td className="px-3 py-2">
                     <p className="text-sm font-medium text-foreground">{p.producto}</p>
                     <p className="text-xs text-muted-foreground">{p.sku}</p>
                   </td>
-                  <td className="px-3 py-2 text-sm">{p.lote}</td>
                   <td className="px-3 py-2 text-sm text-center font-medium">{p.cantDespacho}</td>
-                  <td className="px-3 py-2">
-                    <Input type="number" min={0} value={p.vendido}
-                      onChange={(e) => updateProducto(p.id, "vendido", parseInt(e.target.value) || 0)}
-                      className="w-16 min-h-[48px] text-center" />
+                  <td className="px-3 py-2 text-sm text-center">{totalVendido}</td>
+                  <td className="px-3 py-2 text-sm text-center font-bold">{totalOptimo}</td>
+                  <td className="px-3 py-2 text-sm text-center">
+                    {totalDefEst}
+                    {totalDefEst > 0 && <span className="block text-[9px] font-medium px-1 py-0.5 rounded bg-purple-100 text-purple-700 mt-0.5">Pool GG</span>}
                   </td>
-                  <td className="px-3 py-2">
-                    <Input type="number" min={0} value={p.optimo}
-                      onChange={(e) => updateProducto(p.id, "optimo", parseInt(e.target.value) || 0)}
-                      className="w-16 min-h-[48px] text-center" />
+                  <td className="px-3 py-2 text-sm text-center">
+                    {totalProx}
+                    {totalProx > 0 && <span className="block text-[9px] font-medium px-1 py-0.5 rounded bg-purple-100 text-purple-700 mt-0.5">Pool GG</span>}
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="space-y-1">
-                      <Input type="number" min={0} value={p.defectoEstetico}
-                        onChange={(e) => updateProducto(p.id, "defectoEstetico", parseInt(e.target.value) || 0)}
-                        className="w-16 min-h-[48px] text-center" />
-                      {p.defectoEstetico > 0 && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 block text-center">Pool GG</span>
-                      )}
-                    </div>
+                  <td className="px-3 py-2 text-sm text-center">
+                    {totalVencido}
+                    {totalVencido > 0 && <span className="block text-[9px] font-medium px-1 py-0.5 rounded bg-red-100 text-red-700 mt-0.5">Merma</span>}
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="space-y-1">
-                      <Input type="number" min={0} value={p.proximoVencer}
-                        onChange={(e) => updateProducto(p.id, "proximoVencer", parseInt(e.target.value) || 0)}
-                        className="w-16 min-h-[48px] text-center" />
-                      {p.proximoVencer > 0 && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 block text-center">Pool GG</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="space-y-1">
-                      <Input type="number" min={0} value={p.vencido}
-                        onChange={(e) => updateProducto(p.id, "vencido", parseInt(e.target.value) || 0)}
-                        className="w-16 min-h-[48px] text-center" />
-                      {p.vencido > 0 && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700 block text-center">Merma</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">
-                    {p.optimo > 0 ? (
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    {totalOptimo > 0 ? (
                       <Select
                         value={p.destinoOptimo ?? ""}
-                        onValueChange={(v) => updateProducto(p.id, "destinoOptimo", v as "REINGRESO" | "STOCK_FLOTANTE")}
+                        onValueChange={(v) => updateDestinoOptimo(p.id, v as "REINGRESO" | "STOCK_FLOTANTE")}
                       >
-                        <SelectTrigger className="w-[140px] min-h-[48px] text-sm">
+                        <SelectTrigger className="w-[130px] min-h-[40px] text-sm">
                           <SelectValue placeholder="Seleccionar" />
                         </SelectTrigger>
                         <SelectContent>
@@ -246,32 +291,117 @@ export default function ControlRetorno() {
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2">
-                    <Input value={p.observacion}
-                      onChange={(e) => updateProducto(p.id, "observacion", e.target.value)}
-                      placeholder="—" className="w-full min-h-[48px] text-sm" />
-                  </td>
+                  <td className="px-3 py-2 text-sm text-muted-foreground">—</td>
                   <td className="px-3 py-2 text-center">
                     {complete ? (
                       <Check size={18} className="text-green-600 mx-auto" />
                     ) : (
                       <div className="text-center">
                         <XCircle size={18} className="text-red-500 mx-auto" />
-                        {diff !== 0 && <p className="text-[10px] text-red-600 mt-0.5">Faltan {diff}u</p>}
+                        {diff !== 0 && <p className="text-[9px] text-red-600">Faltan {diff}u</p>}
                       </div>
                     )}
                   </td>
                 </tr>
-              );
-            })}
-            {productos.length === 0 && (
+
+                {/* Lot Sub-Rows */}
+                {isOpen && p.lotes.map((l) => {
+                  const lSum = getLoteSum(l);
+                  return (
+                    <tr key={l.id} className="bg-slate-50 min-h-[48px]">
+                      <td className="px-3 py-2 text-right text-muted-foreground text-xs">└</td>
+                      <td className="px-3 py-2">
+                        <Input
+                          value={l.lote}
+                          onChange={(e) => updateLote(p.id, l.id, "lote", e.target.value)}
+                          placeholder="Lote"
+                          className="w-28 min-h-[40px] text-sm"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-center text-xs text-muted-foreground">—</td>
+                      <td className="px-3 py-2">
+                        <Input type="number" min={0} value={l.vendido}
+                          onChange={(e) => updateLote(p.id, l.id, "vendido", parseInt(e.target.value) || 0)}
+                          className="w-14 min-h-[40px] text-center" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Input type="number" min={0} value={l.optimo}
+                          onChange={(e) => updateLote(p.id, l.id, "optimo", parseInt(e.target.value) || 0)}
+                          className="w-14 min-h-[40px] text-center" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="space-y-0.5">
+                          <Input type="number" min={0} value={l.defectoEstetico}
+                            onChange={(e) => updateLote(p.id, l.id, "defectoEstetico", parseInt(e.target.value) || 0)}
+                            className="w-14 min-h-[40px] text-center" />
+                          {l.defectoEstetico > 0 && <span className="text-[9px] font-medium px-1 py-0.5 rounded bg-purple-100 text-purple-700 block text-center">Pool GG</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="space-y-0.5">
+                          <Input type="number" min={0} value={l.proximoVencer}
+                            onChange={(e) => updateLote(p.id, l.id, "proximoVencer", parseInt(e.target.value) || 0)}
+                            className="w-14 min-h-[40px] text-center" />
+                          {l.proximoVencer > 0 && <span className="text-[9px] font-medium px-1 py-0.5 rounded bg-purple-100 text-purple-700 block text-center">Pool GG</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="space-y-0.5">
+                          <Input type="number" min={0} value={l.vencido}
+                            onChange={(e) => updateLote(p.id, l.id, "vencido", parseInt(e.target.value) || 0)}
+                            className="w-14 min-h-[40px] text-center" />
+                          {l.vencido > 0 && <span className="text-[9px] font-medium px-1 py-0.5 rounded bg-red-100 text-red-700 block text-center">Merma</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">—</td>
+                      <td className="px-3 py-2">
+                        <Input
+                          value={l.observacion}
+                          onChange={(e) => updateLote(p.id, l.id, "observacion", e.target.value)}
+                          placeholder="—"
+                          className="w-full min-h-[40px] text-sm"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                          disabled={p.lotes.length <= 1}
+                          onClick={() => removeLote(p.id, l.id)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Add lot button */}
+                {isOpen && (
+                  <tr className="bg-slate-50">
+                    <td className="px-3 py-2 text-right text-muted-foreground text-xs">└</td>
+                    <td colSpan={10} className="px-3 py-2">
+                      <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => addLote(p.id)}>
+                        <Plus size={14} className="mr-1" /> Agregar lote
+                      </Button>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Agrega un lote si identificas productos vencidos o por vencer de un lote diferente
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            );
+          })}
+          {productos.length === 0 && (
+            <tbody>
               <tr>
                 <td colSpan={11} className="px-3 py-12 text-center text-muted-foreground">
                   No hay productos de retorno para esta ruta
                 </td>
               </tr>
-            )}
-          </tbody>
+            </tbody>
+          )}
         </table>
       </div>
 
