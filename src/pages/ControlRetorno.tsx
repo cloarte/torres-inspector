@@ -84,8 +84,6 @@ export default function ControlRetorno() {
   }
 
   const salidaHadObs = ruta.salida === "CON_OBS";
-
-  const salidaHadObs = ruta.salida === "CON_OBS";
   const salidaObsCount = ruta.productosSalida.filter((p) => p.cantVerificada !== p.cantDespacho).length;
 
   const getForm = (id: string) => formState[id] ?? { obs: "" };
