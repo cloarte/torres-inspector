@@ -57,6 +57,23 @@ export default function ControlRetorno() {
   const [despachoOpen, setDespachoOpen] = useState(false);
   const [formState, setFormState] = useState<Record<string, { condicion?: Condicion; destino?: Destino; obs: string }>>({});
 
+  const counts = useMemo(() => {
+    const total = retornos.length;
+    const inspeccionados = retornos.filter((r) => r.estado === "PROCESADO").length;
+    const pendientes = retornos.filter((r) => r.estado === "PENDIENTE").length;
+    const mermas = retornos.filter((r) => r.destino === "MERMA").length;
+    return { total, inspeccionados, pendientes, mermas };
+  }, [retornos]);
+
+  const filtered = useMemo(() => {
+    return retornos.filter((r) => {
+      if (tab === "PENDIENTES" && r.estado !== "PENDIENTE") return false;
+      if (tab === "INSPECCIONADOS" && r.estado !== "PROCESADO") return false;
+      if (tab === "POOL_GG" && r.destino !== "POOL_GG") return false;
+      return true;
+    });
+  }, [retornos, tab]);
+
   if (!ruta) {
     return (
       <div className="max-w-5xl mx-auto p-8 text-center">
