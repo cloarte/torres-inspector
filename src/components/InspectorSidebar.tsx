@@ -1,21 +1,21 @@
 import { useLocation, Link } from "react-router-dom";
-import { Search, ClipboardList, Bell, User, LogOut } from "lucide-react";
+import { Truck, ClipboardList, Bell, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_GROUPS = [
   {
-    label: "ENTREGA",
+    label: "RUTAS",
     items: [
       {
-        label: "Retornos Pendientes",
-        icon: Search,
-        path: "/entrega/retornos",
+        label: "Rutas del Día",
+        icon: Truck,
+        path: "/inspector/rutas",
         badge: 3,
       },
       {
-        label: "Historial de Retornos",
+        label: "Historial de Rutas",
         icon: ClipboardList,
-        path: "/entrega/retornos/historial",
+        path: "/inspector/historial",
       },
     ],
   },
@@ -25,14 +25,14 @@ const NAV_GROUPS = [
       {
         label: "Alertas de Vencimiento",
         icon: Bell,
-        path: "/vencidos/alertas",
+        path: "/inspector/alertas",
       },
     ],
   },
   {
     label: "CUENTA",
     items: [
-      { label: "Mi Perfil", icon: User, path: "/perfil" },
+      { label: "Mi Perfil", icon: User, path: "/inspector/perfil" },
     ],
   },
 ];
@@ -63,7 +63,7 @@ export function InspectorSidebar({ open }: Props) {
               </p>
             )}
             {group.items.map((item) => {
-              const active = pathname === item.path;
+              const active = pathname.startsWith(item.path);
               return (
                 <Link
                   key={item.path}
@@ -82,11 +82,6 @@ export function InspectorSidebar({ open }: Props) {
                   )}
                   {open && item.badge != null && item.badge > 0 && (
                     <span className="bg-accent text-accent-foreground text-xs font-bold px-2 py-0.5 rounded-full min-w-[24px] text-center">
-                      {item.badge}
-                    </span>
-                  )}
-                  {!open && item.badge != null && item.badge > 0 && (
-                    <span className="absolute left-9 top-1 bg-accent text-accent-foreground text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                       {item.badge}
                     </span>
                   )}
