@@ -38,6 +38,16 @@ export default function ControlRetorno() {
   const [productos, setProductos] = useState<ProductoRetorno[]>(ruta?.productosRetorno ?? []);
   const [despachoOpen, setDespachoOpen] = useState(false);
 
+  const counts = useMemo(() => {
+    const total = productos.length;
+    const complete = productos.filter(isRowComplete).length;
+    const incomplete = total - complete;
+    const mermas = productos.filter((p) => p.vencido > 0).length;
+    return { total, complete, incomplete, mermas };
+  }, [productos]);
+
+  const allComplete = useMemo(() => productos.length > 0 && productos.every(isRowComplete), [productos]);
+
   if (!ruta) {
     return (
       <div className="max-w-6xl mx-auto p-8 text-center">
@@ -49,16 +59,6 @@ export default function ControlRetorno() {
 
   const salidaHadObs = ruta.salida === "CON_OBS";
   const salidaObsCount = ruta.productosSalida.filter((p) => p.optimo !== p.cantDespacho).length;
-
-  const counts = useMemo(() => {
-    const total = productos.length;
-    const complete = productos.filter(isRowComplete).length;
-    const incomplete = total - complete;
-    const mermas = productos.filter((p) => p.vencido > 0).length;
-    return { total, complete, incomplete, mermas };
-  }, [productos]);
-
-  const allComplete = useMemo(() => productos.length > 0 && productos.every(isRowComplete), [productos]);
 
   const updateProducto = (id: string, field: keyof ProductoRetorno, value: number | string | undefined) => {
     setProductos((prev) =>
