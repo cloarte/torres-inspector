@@ -83,22 +83,7 @@ export default function ControlRetorno() {
     );
   }
 
-  const counts = useMemo(() => {
-    const total = retornos.length;
-    const inspeccionados = retornos.filter((r) => r.estado === "PROCESADO").length;
-    const pendientes = retornos.filter((r) => r.estado === "PENDIENTE").length;
-    const mermas = retornos.filter((r) => r.destino === "MERMA").length;
-    return { total, inspeccionados, pendientes, mermas };
-  }, [retornos]);
-
-  const filtered = useMemo(() => {
-    return retornos.filter((r) => {
-      if (tab === "PENDIENTES" && r.estado !== "PENDIENTE") return false;
-      if (tab === "INSPECCIONADOS" && r.estado !== "PROCESADO") return false;
-      if (tab === "POOL_GG" && r.destino !== "POOL_GG") return false;
-      return true;
-    });
-  }, [retornos, tab]);
+  const salidaHadObs = ruta.salida === "CON_OBS";
 
   const salidaHadObs = ruta.salida === "CON_OBS";
   const salidaObsCount = ruta.productosSalida.filter((p) => p.cantVerificada !== p.cantDespacho).length;
