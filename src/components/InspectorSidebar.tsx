@@ -1,5 +1,5 @@
 import { useLocation, Link } from "react-router-dom";
-import { Truck, ClipboardList, Bell, User, LogOut } from "lucide-react";
+import { Truck, Bell, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_GROUPS = [
@@ -11,11 +11,6 @@ const NAV_GROUPS = [
         icon: Truck,
         path: "/inspector/rutas",
         badge: 3,
-      },
-      {
-        label: "Historial de Rutas",
-        icon: ClipboardList,
-        path: "/inspector/historial",
       },
     ],
   },
