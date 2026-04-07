@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MOCK_RUTAS, type Ruta, type EstadoRuta, getEstadoRuta } from "@/types/inspector";
 
-type TabFilter = "TODOS" | "PENDIENTE_SALIDA" | "EN_RUTA" | "PENDIENTE_RETORNO" | "COMPLETADA";
+type TabFilter = "PENDIENTE_SALIDA" | "PENDIENTE_RETORNO" | "COMPLETADA";
 
 const SALIDA_PILL: Record<string, { cls: string; label: string }> = {
   PENDIENTE: { cls: "bg-amber-100 text-amber-700", label: "⏳ Salida pendiente" },
@@ -33,7 +33,7 @@ const BORDER_COLOR: Record<EstadoRuta, string> = {
 
 export default function RutasDelDia() {
   const [date, setDate] = useState<Date>(new Date());
-  const [tab, setTab] = useState<TabFilter>("TODOS");
+  const [tab, setTab] = useState<TabFilter>("PENDIENTE_SALIDA");
   const [canalFilter, setCanalFilter] = useState("all");
   const navigate = useNavigate();
 
@@ -49,16 +49,14 @@ export default function RutasDelDia() {
   const filtered = useMemo(() => {
     return rutas.filter((r) => {
       const estado = getEstadoRuta(r);
-      if (tab !== "TODOS" && estado !== tab) return false;
+      if (estado !== tab) return false;
       if (canalFilter !== "all" && r.canal !== canalFilter) return false;
       return true;
     });
   }, [rutas, tab, canalFilter]);
 
   const tabs: { key: TabFilter; label: string; count?: number }[] = [
-    { key: "TODOS", label: "Todos" },
     { key: "PENDIENTE_SALIDA", label: "Pendiente Salida", count: counts.PENDIENTE_SALIDA },
-    { key: "EN_RUTA", label: "En Ruta", count: counts.EN_RUTA },
     { key: "PENDIENTE_RETORNO", label: "Pendiente Retorno", count: counts.PENDIENTE_RETORNO },
     { key: "COMPLETADA", label: "Completada", count: counts.COMPLETADA },
   ];
@@ -119,7 +117,6 @@ export default function RutasDelDia() {
       <div className="bg-card rounded-xl p-4 shadow-sm flex items-center divide-x divide-border">
         {[
           { label: "Pendientes Salida", value: counts.PENDIENTE_SALIDA, cls: "text-amber-600" },
-          { label: "En Ruta", value: counts.EN_RUTA, cls: "text-blue-600" },
           { label: "Pendientes Retorno", value: counts.PENDIENTE_RETORNO, cls: "text-purple-600" },
           { label: "Completadas", value: counts.COMPLETADA, cls: "text-green-600" },
         ].map((s) => (
