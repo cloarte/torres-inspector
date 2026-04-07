@@ -1,10 +1,10 @@
 import { useLocation, Link } from "react-router-dom";
-import { Truck, Bell, User, LogOut } from "lucide-react";
+import { Truck, History, User, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_GROUPS = [
   {
-    label: "RUTAS",
+    label: "ENTREGA",
     items: [
       {
         label: "Rutas del Día",
@@ -12,15 +12,10 @@ const NAV_GROUPS = [
         path: "/inspector/rutas",
         badge: 3,
       },
-    ],
-  },
-  {
-    label: "VENCIDOS",
-    items: [
       {
-        label: "Alertas de Vencimiento",
-        icon: Bell,
-        path: "/inspector/alertas",
+        label: "Historial de Retornos",
+        icon: History,
+        path: "/inspector/historial",
       },
     ],
   },
