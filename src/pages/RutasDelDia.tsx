@@ -174,14 +174,13 @@ export default function RutasDelDia() {
               <div className="flex items-center gap-4 flex-wrap">
                 {/* LEFT */}
                 <div className="w-full sm:w-1/3 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-primary text-primary-foreground text-xs font-bold px-2 py-0.5 rounded">{ruta.codigo}</span>
-                    <span className="bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded">{ruta.canal}</span>
-                  </div>
-                  <p className="text-base font-semibold text-foreground">{ruta.vendedor}</p>
+                  <p className="text-base font-bold text-foreground">{ruta.nDespacho}</p>
                   <p className="text-sm text-muted-foreground">
-                    {ruta.pedidos} pedidos · {ruta.productos} productos · Sobrestock: {ruta.sobrestock ? "Sí" : "No"}
+                    {ruta.vendedor} · {ruta.codigo} · {ruta.pedidos} pedidos · {ruta.productos} productos · Sobrestock: {ruta.sobrestock ? "Sí" : "No"}
                   </p>
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <span className="bg-muted text-muted-foreground text-[10px] px-2 py-0.5 rounded">{ruta.canal}</span>
+                  </div>
                 </div>
 
                 {/* CENTER */}

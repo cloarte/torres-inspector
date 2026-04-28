@@ -267,9 +267,9 @@ export default function ControlSalida() {
             <ArrowLeft size={20} />
           </Button>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Control de Salida — Ruta {ruta.codigo}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">Control de Salida — {ruta.nDespacho}</h1>
             <p className="text-muted-foreground mt-0.5">
-              {ruta.vendedor} · {format(new Date(), "dd/MM/yyyy", { locale: es })} · {totalProducts} lotes a verificar
+              {ruta.vendedor} · {ruta.codigo} · {format(new Date(), "dd/MM/yyyy", { locale: es })} · {productos.length} productos a verificar
             </p>
           </div>
         </div>
