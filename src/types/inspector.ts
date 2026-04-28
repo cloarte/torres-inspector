@@ -73,6 +73,7 @@ export interface RetornoItem {
 export interface Ruta {
   id: string;
   codigo: string;
+  nDespacho: string;
   canal: string;
   vendedor: string;
   pedidos: number;
@@ -103,7 +104,7 @@ export function genId(): string {
 // Mock data
 export const MOCK_RUTAS: Ruta[] = [
   {
-    id: "1", codigo: "LIM-01", canal: "Tradicional", vendedor: "Juan López",
+    id: "1", codigo: "LIM-01", nDespacho: "DSP-2026-0018", canal: "Tradicional", vendedor: "Juan López",
     pedidos: 8, productos: 45, sobrestock: true,
     salida: "PENDIENTE", retorno: "EN_RUTA",
     productosSalida: [
@@ -143,7 +144,7 @@ export const MOCK_RUTAS: Ruta[] = [
     retornos: [],
   },
   {
-    id: "2", codigo: "LIM-02", canal: "Moderno", vendedor: "Pedro Soto",
+    id: "2", codigo: "LIM-02", nDespacho: "DSP-2026-0017", canal: "Moderno", vendedor: "Pedro Soto",
     pedidos: 3, productos: 18, sobrestock: false,
     salida: "VERIFICADA", retorno: "EN_RUTA", horaSalida: "07:30",
     productosSalida: [],
@@ -151,7 +152,7 @@ export const MOCK_RUTAS: Ruta[] = [
     retornos: [],
   },
   {
-    id: "3", codigo: "LIM-03", canal: "Directa", vendedor: "Ana García",
+    id: "3", codigo: "LIM-03", nDespacho: "DSP-2026-0016", canal: "Directa", vendedor: "Ana García",
     pedidos: 5, productos: 30, sobrestock: true,
     salida: "CON_OBS", retorno: "EN_RUTA", horaSalida: "07:45",
     productosSalida: [],
@@ -159,7 +160,7 @@ export const MOCK_RUTAS: Ruta[] = [
     retornos: [],
   },
   {
-    id: "4", codigo: "LIM-04", canal: "Tradicional", vendedor: "Carlos Díaz",
+    id: "4", codigo: "LIM-04", nDespacho: "DSP-2026-0019", canal: "Tradicional", vendedor: "Carlos Díaz",
     pedidos: 6, productos: 38, sobrestock: false,
     salida: "VERIFICADA", retorno: "PENDIENTE", horaSalida: "06:30",
     productosSalida: [
@@ -207,7 +208,7 @@ export const MOCK_RUTAS: Ruta[] = [
     retornos: [],
   },
   {
-    id: "5", codigo: "PRV-01", canal: "Tradicional", vendedor: "María Torres",
+    id: "5", codigo: "PRV-01", nDespacho: "DSP-2026-0020", canal: "Tradicional", vendedor: "María Torres",
     pedidos: 12, productos: 80, sobrestock: true,
     salida: "VERIFICADA", retorno: "PENDIENTE", horaSalida: "06:00",
     productosSalida: [],
