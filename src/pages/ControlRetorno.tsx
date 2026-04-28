@@ -136,9 +136,9 @@ export default function ControlRetorno() {
             <ArrowLeft size={20} />
           </Button>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Control de Retorno — Ruta {ruta.codigo}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">Control de Retorno — {ruta.nDespacho}</h1>
             <p className="text-muted-foreground mt-0.5">
-              {ruta.vendedor} · Salió: {ruta.horaSalida ?? "—"} · Regresó: {format(new Date(), "dd/MM/yyyy", { locale: es })}
+              {ruta.vendedor} · {ruta.codigo} · Salió: {ruta.horaSalida ?? "—"} · Regresó: {format(new Date(), "dd/MM/yyyy", { locale: es })}
             </p>
           </div>
         </div>
@@ -153,7 +153,7 @@ export default function ControlRetorno() {
           className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground min-h-[48px]"
           onClick={() => setDespachoOpen(!despachoOpen)}
         >
-          <span>📦 Ver despacho original</span>
+          <span>📦 Ver despacho original — {ruta.nDespacho}</span>
           {despachoOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
         {despachoOpen && (
